@@ -138,6 +138,9 @@ function renderJobs(){
     let url = String(j.url || '').trim();
     let cargo = String(j.cargo || '').trim();
     let empresa = String(j.empresa || '').trim();
+    if (!empresa || /^no especificad[oa]$/i.test(empresa)) {
+      empresa = 'Empresa Verificada';
+    }
     if (!url.startsWith('http') && empresa.startsWith('http')) {
       url = empresa;
       empresa = 'Empresa Verificada';
