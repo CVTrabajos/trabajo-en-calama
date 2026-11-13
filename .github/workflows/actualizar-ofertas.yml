@@ -1,4 +1,4 @@
-name: Actualizar Ofertas Automaticamente
+name: Actualizar ofertas
 
 on:
   schedule:
@@ -8,27 +8,36 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: actualizar-ofertas
+  cancel-in-progress: false
+
 jobs:
-  update-offers:
+  actualizar:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Descargar ofertas desde Apps Script
+        env:
+          APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzm3KlsBRcbeZLxZRS2Hw4-vawjBynVudVuitqlea4fcvtzKzNcjWBWh_HOb7J7G0u1cg/exec"
         run: |
-          curl -L -s -o temp_ofertas.json "https://script.google.com/macros/s/AKfycbyvxMEe-_eRRjsM7eCw0XThGfIUlBf52tVcGda_0AB6t3h4oLRTaGrWyfcp-qYEFpRx/exec"
-          if grep -q '\[{' temp_ofertas.json; then
-            mv temp_ofertas.json ofertas.json
-            echo "Ofertas actualizadas con exito."
-          else
-            echo "Respuesta invalida recibida de Apps Script. Se mantiene archivo vigente."
-            rm -f temp_ofertas.json
-          fi
-
-      - name: Commit y push si hay cambios
+          curl -sL --retry 3 --max-time 90 "$APPS_SCRIPT_URL" -o nuevo.json
+          python3 - <<'EOF'
+          import json, sys
+          try:
+              d = json.load(open('nuevo.json', encoding='utf-8'))
+          except Exception as e:
+              sys.exit("Respuesta no válida: %s" % e)
+          if not isinstance(d, list) or len(d) == 0:
+              sys.exit("La lista vino vacía, no se actualiza")
+          with open('ofertas.json', 'w', encoding='utf-8') as f:
+              json.dump(d, f, ensure_ascii=False, separators=(',', ':'))
+          print("Ofertas guardadas:", len(d))
+          EOF
+          rm -f nuevo.json
+      - name: Guardar cambios
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "actualizador"
+          git config user.email "actualizador@users.noreply.github.com"
           git add ofertas.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto: Actualizar ofertas vigentes [skip ci]" && git push)
+          git diff --cached --quiet || (git commit -m "Actualizar ofertas" && git push)
